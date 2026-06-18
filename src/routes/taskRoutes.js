@@ -8,7 +8,6 @@ const {
   createTask,
   updateTask,
   deleteTask,
-  moveTask,
   reorderTasks,
 } = require('../controllers/taskController');
 
@@ -218,45 +217,6 @@ router.patch(
   [body('tasks').isArray({ min: 1 }).withMessage('tasks must be a non-empty array')],
   validate,
   reorderTasks
-);
-
-/**
- * @swagger
- * /api/tasks/{id}/move:
- *   patch:
- *     summary: Move a task up or down
- *     tags: [Tasks]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - direction
- *             properties:
- *               direction:
- *                 type: string
- *                 enum: [up, down]
- *     responses:
- *       200:
- *         description: Task moved successfully
- */
-// PATCH /api/tasks/:id/move
-router.patch(
-  '/:id/move',
-  [
-    param('id').isMongoId().withMessage('Invalid task id'),
-    body('direction').isIn(['up', 'down']).withMessage('direction must be up or down'),
-  ],
-  validate,
-  moveTask
 );
 
 module.exports = router;

@@ -42,17 +42,21 @@ const getColumnById = async (req, res) => {
 // Auto-assigns order = last + 1
 const createColumn = async (req, res) => {
   try {
+    const { name, user_id } = req.body;
+
+    let targetUserId = req.user._id;
     if (req.user.role === 'admin') {
-      return res.status(403).json({ success: false, message: 'Admin cannot create data' });
+      if (!user_id) {
+         return res.status(400).json({ success: false, message: 'Admin must provide user_id to create a column' });
+      }
+      targetUserId = user_id;
     }
 
-    const { name } = req.body;
-
     // Find current max order for this user
-    const last = await Column.findOne({ user_id: req.user._id }).sort({ order: -1 }).select('order');
+    const last = await Column.findOne({ user_id: targetUserId }).sort({ order: -1 }).select('order');
     const order = last ? last.order + 1 : 1;
 
-    const column = await Column.create({ name, order, user_id: req.user._id });
+    const column = await Column.create({ name, order, user_id: targetUserId });
 
     res.status(201).json({ success: true, data: column });
   } catch (err) {
@@ -64,14 +68,11 @@ const createColumn = async (req, res) => {
 // Body: { name }  — only name is editable via this route
 const updateColumn = async (req, res) => {
   try {
-    if (req.user.role === 'admin') {
-      return res.status(403).json({ success: false, message: 'Admin cannot modify data' });
-    }
-
     const { name } = req.body;
 
+    const filter = req.user.role === 'admin' ? { _id: req.params.id } : { _id: req.params.id, user_id: req.user._id };
     const column = await Column.findOneAndUpdate(
-      { _id: req.params.id, user_id: req.user._id },
+      filter,
       { name },
       { new: true, runValidators: true }
     ).populate('count');
@@ -90,26 +91,24 @@ const updateColumn = async (req, res) => {
 // Also deletes all tasks inside that column
 const deleteColumn = async (req, res) => {
   try {
-    if (req.user.role === 'admin') {
-      return res.status(403).json({ success: false, message: 'Admin cannot delete data' });
-    }
-
-    const column = await Column.findOne({ _id: req.params.id, user_id: req.user._id });
+    const filter = req.user.role === 'admin' ? { _id: req.params.id } : { _id: req.params.id, user_id: req.user._id };
+    const column = await Column.findOne(filter);
     if (!column) {
       return res.status(404).json({ success: false, message: 'Column not found or unauthorized' });
     }
 
+    const targetUserId = column.user_id;
     const deletedOrder = column.order;
 
     // Delete column tasks
-    await Task.deleteMany({ column_id: req.params.id, user_id: req.user._id });
+    await Task.deleteMany({ column_id: req.params.id, user_id: targetUserId });
 
     // Delete column
     await column.deleteOne();
 
     // Shift orders of columns that came after deleted one
     await Column.updateMany(
-      { user_id: req.user._id, order: { $gt: deletedOrder } },
+      { user_id: targetUserId, order: { $gt: deletedOrder } },
       { $inc: { order: -1 } }
     );
 
@@ -124,24 +123,22 @@ const deleteColumn = async (req, res) => {
 // Swaps order with adjacent column
 const moveColumn = async (req, res) => {
   try {
-    if (req.user.role === 'admin') {
-      return res.status(403).json({ success: false, message: 'Admin cannot modify data' });
-    }
-
     const { direction } = req.body;
 
     if (!['left', 'right'].includes(direction)) {
       return res.status(400).json({ success: false, message: 'direction must be "left" or "right"' });
     }
 
-    const column = await Column.findOne({ _id: req.params.id, user_id: req.user._id });
+    const filter = req.user.role === 'admin' ? { _id: req.params.id } : { _id: req.params.id, user_id: req.user._id };
+    const column = await Column.findOne(filter);
     if (!column) {
       return res.status(404).json({ success: false, message: 'Column not found or unauthorized' });
     }
 
+    const targetUserId = column.user_id;
     const targetOrder = direction === 'left' ? column.order - 1 : column.order + 1;
 
-    const sibling = await Column.findOne({ user_id: req.user._id, order: targetOrder });
+    const sibling = await Column.findOne({ user_id: targetUserId, order: targetOrder });
     if (!sibling) {
       return res.status(400).json({ success: false, message: `No column to move ${direction}` });
     }
@@ -160,37 +157,6 @@ const moveColumn = async (req, res) => {
   }
 };
 
-// PATCH /api/columns/reorder
-// Body: { orders: [{ id, order }] }
-// Bulk reorder — drag & drop support
-const reorderColumns = async (req, res) => {
-  try {
-    if (req.user.role === 'admin') {
-      return res.status(403).json({ success: false, message: 'Admin cannot modify data' });
-    }
-
-    const { orders } = req.body;
-
-    if (!Array.isArray(orders) || orders.length === 0) {
-      return res.status(400).json({ success: false, message: 'orders array is required' });
-    }
-
-    const bulkOps = orders.map(({ id, order }) => ({
-      updateOne: {
-        filter: { _id: id, user_id: req.user._id },
-        update: { $set: { order } },
-      },
-    }));
-
-    await Column.bulkWrite(bulkOps);
-
-    const columns = await Column.find({ user_id: req.user._id }).sort({ order: 1 }).populate('count');
-
-    res.json({ success: true, data: columns });
-  } catch (err) {
-    res.status(400).json({ success: false, message: err.message });
-  }
-};
 
 module.exports = {
   getColumns,
@@ -199,5 +165,4 @@ module.exports = {
   updateColumn,
   deleteColumn,
   moveColumn,
-  reorderColumns,
 };

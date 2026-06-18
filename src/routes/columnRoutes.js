@@ -9,7 +9,6 @@ const {
   updateColumn,
   deleteColumn,
   moveColumn,
-  reorderColumns,
 } = require('../controllers/columnController');
 
 /**
@@ -153,40 +152,6 @@ router.delete(
   [param('id').isMongoId().withMessage('Invalid column id')],
   validate,
   deleteColumn
-);
-
-/**
- * @swagger
- * /api/columns/reorder:
- *   patch:
- *     summary: Reorder columns
- *     tags: [Columns]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               orders:
- *                 type: array
- *                 items:
- *                   type: object
- *                   properties:
- *                     id:
- *                       type: string
- *                     order:
- *                       type: number
- *     responses:
- *       200:
- *         description: Columns reordered successfully
- */
-// PATCH /api/columns/reorder  — must come BEFORE /:id routes
-router.patch(
-  '/reorder',
-  [body('orders').isArray({ min: 1 }).withMessage('orders must be a non-empty array')],
-  validate,
-  reorderColumns
 );
 
 /**

@@ -30,9 +30,32 @@ const getUsers = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Forbidden. Only admin can view users.' });
     }
 
-    const users = await User.find().sort({ createdAt: -1 });
+    const filter = {};
+    if (req.query.search) {
+      filter.name = { $regex: req.query.search, $options: 'i' };
+    }
 
-    res.json({ success: true, data: users });
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 10;
+    const skip = (page - 1) * limit;
+
+    const users = await User.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const total = await User.countDocuments(filter);
+
+    res.json({
+      success: true,
+      data: users,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      }
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

@@ -11,11 +11,35 @@ const getTasks = async (req, res) => {
       filter.column_id = req.query.column_id;
     }
 
+    if (req.query.search) {
+      filter.$or = [
+        { title: { $regex: req.query.search, $options: 'i' } },
+        { description: { $regex: req.query.search, $options: 'i' } }
+      ];
+    }
+
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 10;
+    const skip = (page - 1) * limit;
+
     const tasks = await Task.find(filter)
       .sort({ column_id: 1, order: 1 })
+      .skip(skip)
+      .limit(limit)
       .populate('column_id', 'name');
 
-    res.json({ success: true, data: tasks });
+    const total = await Task.countDocuments(filter);
+
+    res.json({
+      success: true,
+      data: tasks,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      }
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -172,46 +196,65 @@ const deleteTask = async (req, res) => {
   }
 };
 
-// PATCH /api/tasks/reorder
-// Body: { tasks: [{ id, column_id, order }] }
-// Bulk reorder — drag & drop support across columns
-const reorderTasks = async (req, res) => {
+// PATCH /api/tasks/:id
+// Body: { column_id, order }
+// Single task reorder — handles column change + order shift
+const reorderTask = async (req, res) => {
   try {
-    const { tasks } = req.body;
+    const { column_id, order } = req.body;
 
-    if (!Array.isArray(tasks) || tasks.length === 0) {
-      return res.status(400).json({ success: false, message: 'tasks array is required' });
+    if (order === undefined || !column_id) {
+      return res.status(400).json({ success: false, message: 'order and column_id are required' });
     }
 
-    // First ensure all tasks belong to user and target columns belong to user
-    const taskIds = tasks.map(t => t.id);
-    const colIds = [...new Set(tasks.map(t => t.column_id))];
-
-    const filterTask = req.user.role === 'admin' ? { _id: { $in: taskIds } } : { _id: { $in: taskIds }, user_id: req.user._id };
-    const userTasksCount = await Task.countDocuments(filterTask);
-    if (userTasksCount !== taskIds.length) {
-       return res.status(403).json({ success: false, message: 'One or more tasks are unauthorized' });
+    const filter = req.user.role === 'admin' ? { _id: req.params.id } : { _id: req.params.id, user_id: req.user._id };
+    const task = await Task.findOne(filter);
+    if (!task) {
+      return res.status(404).json({ success: false, message: 'Task not found or unauthorized' });
     }
 
-    const filterCol = req.user.role === 'admin' ? { _id: { $in: colIds } } : { _id: { $in: colIds }, user_id: req.user._id };
-    const userColsCount = await Column.countDocuments(filterCol);
-    if (userColsCount !== colIds.length) {
-       return res.status(403).json({ success: false, message: 'One or more target columns are unauthorized' });
+    const targetUserId = task.user_id;
+    const oldColumnId = task.column_id.toString();
+    const newColumnId = column_id.toString();
+    const isMovingColumn = oldColumnId !== newColumnId;
+
+    if (isMovingColumn) {
+      const targetColumn = await Column.findOne({ _id: newColumnId, user_id: targetUserId });
+      if (!targetColumn) {
+        return res.status(404).json({ success: false, message: 'Target column not found or unauthorized' });
+      }
     }
 
-    const bulkOps = tasks.map(({ id, column_id, order }) => {
-      const filter = req.user.role === 'admin' ? { _id: id } : { _id: id, user_id: req.user._id };
-      return {
-        updateOne: {
-          filter,
-          update: { $set: { column_id, order } },
-        },
-      };
-    });
+    // Shifting logic
+    if (isMovingColumn) {
+      await Task.updateMany(
+        { column_id: oldColumnId, user_id: targetUserId, order: { $gt: task.order } },
+        { $inc: { order: -1 } }
+      );
+      await Task.updateMany(
+        { column_id: newColumnId, user_id: targetUserId, order: { $gte: order } },
+        { $inc: { order: 1 } }
+      );
+    } else if (order !== task.order) {
+      if (order > task.order) {
+        await Task.updateMany(
+          { column_id: oldColumnId, user_id: targetUserId, order: { $gt: task.order, $lte: order } },
+          { $inc: { order: -1 } }
+        );
+      } else {
+        await Task.updateMany(
+          { column_id: oldColumnId, user_id: targetUserId, order: { $gte: order, $lt: task.order } },
+          { $inc: { order: 1 } }
+        );
+      }
+    }
 
-    await Task.bulkWrite(bulkOps);
+    task.column_id = newColumnId;
+    task.order = order;
+    await task.save();
+    await task.populate('column_id', 'name');
 
-    res.json({ success: true, message: 'Tasks reordered successfully' });
+    res.json({ success: true, message: 'Task position updated successfully', data: task });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
   }
@@ -223,5 +266,5 @@ module.exports = {
   createTask,
   updateTask,
   deleteTask,
-  reorderTasks,
+  reorderTask,
 };

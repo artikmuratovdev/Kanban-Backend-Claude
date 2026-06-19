@@ -8,7 +8,7 @@ const {
   createTask,
   updateTask,
   deleteTask,
-  reorderTasks,
+  reorderTask,
 } = require('../controllers/taskController');
 
 /**
@@ -185,10 +185,16 @@ router.delete(
 
 /**
  * @swagger
- * /api/tasks/reorder:
+ * /api/tasks/{id}:
  *   patch:
- *     summary: Reorder tasks
+ *     summary: Update task position (drag & drop)
  *     tags: [Tasks]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
  *     requestBody:
  *       required: true
  *       content:
@@ -196,27 +202,24 @@ router.delete(
  *           schema:
  *             type: object
  *             properties:
- *               tasks:
- *                 type: array
- *                 items:
- *                   type: object
- *                   properties:
- *                     id:
- *                       type: string
- *                     order:
- *                       type: number
- *                     column_id:
- *                       type: string
+ *               order:
+ *                 type: number
+ *               column_id:
+ *                 type: string
  *     responses:
  *       200:
- *         description: Tasks reordered successfully
+ *         description: Task position updated successfully
  */
-// PATCH /api/tasks/reorder  — must come BEFORE /:id routes
+// PATCH /api/tasks/:id
 router.patch(
-  '/reorder',
-  [body('tasks').isArray({ min: 1 }).withMessage('tasks must be a non-empty array')],
+  '/:id',
+  [
+    param('id').isMongoId().withMessage('Invalid task id'),
+    body('order').isInt({ min: 1 }).withMessage('order must be a positive integer'),
+    body('column_id').isMongoId().withMessage('column_id must be a valid MongoDB id'),
+  ],
   validate,
-  reorderTasks
+  reorderTask
 );
 
 module.exports = router;

@@ -11,6 +11,10 @@ const options = {
     },
     servers: [
       {
+        url: 'http://13.50.4.81:5000/',
+        description: 'Production server',
+      },
+      {
         url: 'http://localhost:5000',
         description: 'Development server',
       },

@@ -7,11 +7,32 @@ const getColumns = async (req, res) => {
   try {
     const filter = req.user.role === 'admin' ? {} : { user_id: req.user._id };
 
+    if (req.query.search) {
+      filter.name = { $regex: req.query.search, $options: 'i' };
+    }
+
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 10;
+    const skip = (page - 1) * limit;
+
     const columns = await Column.find(filter)
       .sort({ order: 1 })
+      .skip(skip)
+      .limit(limit)
       .populate('count');
 
-    res.json({ success: true, data: columns });
+    const total = await Column.countDocuments(filter);
+
+    res.json({
+      success: true,
+      data: columns,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      }
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

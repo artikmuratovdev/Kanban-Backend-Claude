@@ -183,28 +183,14 @@ Taskni o'chiradi. Shu columndagi keyingi tasklarning orderi -1 kamaytiradi.
 
 ---
 
-#### PATCH /api/tasks/:id/move
-Taskni yuqoriga yoki pastga siljitish (qo'shni bilan almashtiradi).
-
-**Body:**
-```json
-{ "direction": "up" }
-{ "direction": "down" }
-```
-
----
-
-#### PATCH /api/tasks/reorder
-Drag & drop uchun bulk reorder (columnlar aro ham ishlaydi).
+#### PATCH /api/tasks/:id
+Taskni reorder qilish (faqat bitta taskni id si bo'yicha siljitish). Boshqa tasklar avtomatik tarzda pastga yoki tepaga siljiydi (order shift).
 
 **Body:**
 ```json
 {
-  "tasks": [
-    { "id": "task_id_1", "column_id": "col_id_1", "order": 1 },
-    { "id": "task_id_2", "column_id": "col_id_2", "order": 1 },
-    { "id": "task_id_3", "column_id": "col_id_1", "order": 2 }
-  ]
+  "column_id": "col_id_1",
+  "order": 2
 }
 ```
 

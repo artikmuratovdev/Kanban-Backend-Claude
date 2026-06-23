@@ -11,7 +11,7 @@ const options = {
     },
     servers: [
       {
-        url: 'http://13.50.4.81:5000/',
+        url: 'https://api-kanban.artikmuratov.uz/',
         description: 'Production server',
       },
       {
